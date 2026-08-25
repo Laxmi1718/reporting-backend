@@ -3,6 +3,7 @@ const { fetchAbisProCrmReport } = require('./abisProCrmService');
 const { fetchTradersCrmReport } = require('./tradersCrmService');
 const { fetchChicksCrmReport } = require('./chicksCrmService');
 const { fetchDoctorCrmReport } = require('./doctorCrmService');
+const { persistCrmAppReports } = require('./crmPersistenceService');
 
 function safeNumber(value) {
   const parsed = Number(value);
@@ -61,7 +62,7 @@ function normalizeLoginData(source, appName, requestedDateRange) {
   const previousContainer = payload.previousPeriod || payload.previous || payload.comparison?.previousPeriod || null;
   const previous = previousContainer?.summary || previousContainer || {};
 
-  const currentTotalUsers = parseAwareNumber(current.totalUsers ?? current.total_users ?? current.users ?? current.userCount ?? current.totalUserCount ?? current.totalUsersCount ?? current.totalActiveEmployees ?? current.totalRegisteredEmployees ?? current.totalRegisteredUsers ?? current.employeeStats?.total ?? payload.totalActiveEmployees ?? payload.totalUsers ?? payload.users);
+  const currentTotalUsers = parseAwareNumber(current.totalUsers ?? current.total_users ?? current.users ?? current.userCount ?? current.totalUserCount ?? current.totalUsersCount ?? current.totalRegisteredEmployees ?? current.totalRegisteredUsers ?? current.employeeStats?.total ?? payload.totalUsers ?? payload.users);
   const currentUniqueUsers = parseAwareNumber(current.uniqueUsers ?? current.unique_users ?? current.activeUsers ?? current.uniqueUserCount ?? current.activeUserCount ?? current.userCount ?? payload.activeUsers ?? payload.uniqueUsers ?? payload.uniqueUserCount);
   const currentTotalLogins = parseAwareNumber(current.totalLogins ?? current.totalLogin ?? current.total_logins ?? current.loginCount ?? current.totalLoginCount ?? current.loginCountTotal ?? payload.totalLogins ?? payload.totalLogin ?? payload.totalLoginCount ?? payload.total_login ?? payload.logins);
   const currentLastLogin = normalizeDate(current.lastLogin ?? current.lastLoginOverall ?? current.last_login ?? current.latestLogin ?? current.lastLoginDate ?? current.login_at ?? payload.lastLogin ?? payload.last_login ?? payload.lastLoginDate ?? payload.lastLoginAt ?? payload.login_at ?? payload.loginAt);
@@ -72,7 +73,7 @@ function normalizeLoginData(source, appName, requestedDateRange) {
   const currentLoginAveragePerUser = parseAwareNumber(current.loginAveragePerUser ?? current.avgLoginsPerUser ?? currentLoginAverageRaw ?? current.loginsPerUser ?? payload.loginAverage ?? payload.loginAveragePerUser ?? payload.avgLoginsPerUser);
   const currentUtilization = parsePercent(current.utilizationPerDay ?? current.utilization ?? current.utilizationPerDayAverage ?? current.overallUtilization ?? payload.utilizationPerDay ?? payload.utilization ?? payload.utilizationPerDayAverage);
 
-  const previousTotalUsers = parseAwareNumber(previous.totalUsers ?? previous.total_users ?? previous.users ?? previous.userCount ?? previous.totalActiveEmployees ?? previous.totalUsersCount ?? previous.totalRegisteredUsers ?? previous.employeeStats?.total);
+  const previousTotalUsers = parseAwareNumber(previous.totalUsers ?? previous.total_users ?? previous.users ?? previous.userCount ?? previous.totalUsersCount ?? previous.totalRegisteredUsers ?? previous.employeeStats?.total);
   const previousUniqueUsers = parseAwareNumber(previous.uniqueUsers ?? previous.unique_users ?? previous.activeUsers ?? previous.uniqueUserCount ?? previous.userCount ?? previous.activeUserCount);
   const previousTotalLogins = parseAwareNumber(previous.totalLogins ?? previous.total_logins ?? previous.loginCount ?? previous.totalLoginCount ?? previous.totalLogin);
   const previousLastLogin = normalizeDate(previous.lastLogin ?? previous.last_login ?? previous.latestLogin ?? previous.lastLoginDate ?? previous.login_at);
@@ -307,6 +308,15 @@ async function fetchCrmOverallReport({ startDate, endDate }) {
     }
     return null;
   }).filter(Boolean);
+
+  // Persist to MySQL as a side effect only - never allowed to alter or block the
+  // response the dashboard receives. persistCrmAppReports() already catches its own
+  // per-module errors; this outer catch is defense-in-depth against anything else.
+  try {
+    await persistCrmAppReports(appReports, { startDate, endDate });
+  } catch (error) {
+    console.error(`[DB persistence] CRM persistence step failed: ${error.message}`);
+  }
 
   const aggregated = aggregateMetrics(appReports);
 

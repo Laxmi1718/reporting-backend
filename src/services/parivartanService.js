@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { getWithProxyFallback } = require('../utils/httpClient');
 
 function logFetchError(app, endpoint, { startDate, endDate }, error) {
   const status = error?.response?.status;
@@ -10,14 +10,14 @@ async function fetchParivartanReport({ startDate, endDate }) {
   const baseURL = process.env.CRM_PARIVARTAN_BASE_URL || 'https://crmapi.abisibg.com/api';
 
   const [loginHistoryRes, loginStatsRes] = await Promise.all([
-    axios.get(`${baseURL}/admin/login-history`, {
+    getWithProxyFallback(`${baseURL}/admin/login-history`, {
       params: { startDate, endDate },
       timeout: 30000,
     }).catch((error) => {
       logFetchError('Parivartan', 'login-history', { startDate, endDate }, error);
       return { error };
     }),
-    axios.get(`${baseURL}/admin/login-stats`, {
+    getWithProxyFallback(`${baseURL}/admin/login-stats`, {
       params: { startDate, endDate },
       timeout: 30000,
     }).catch((error) => {

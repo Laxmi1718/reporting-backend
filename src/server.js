@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const reportRoutes = require('./routes/reportRoutes');
 const crmRoutes = require('./routes/crmRoutes');
 const myIbRoutes = require('./routes/myIbRoutes');
+const ibremsRoutes = require('./routes/ibremsRoutes');
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ app.get('/', (req, res) => {
 app.use('/api/reports', reportRoutes);
 app.use('/api/crm', crmRoutes);
 app.use('/api/myib', myIbRoutes);
+app.use('/api/ibrems', ibremsRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

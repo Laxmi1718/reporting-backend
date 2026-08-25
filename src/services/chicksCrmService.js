@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { getWithProxyFallback } = require('../utils/httpClient');
 
 function logFetchError(app, endpoint, { startDate, endDate }, error) {
   const status = error?.response?.status;
@@ -9,7 +9,7 @@ function logFetchError(app, endpoint, { startDate, endDate }, error) {
 async function fetchChicksCrmReport({ startDate, endDate }) {
   const baseURL = process.env.CRM_CHICKS_BASE_URL || 'https://chickscrmapi.abisibg.com/api';
 
-  const response = await axios.get(`${baseURL}/admin/login-stats`, {
+  const response = await getWithProxyFallback(`${baseURL}/admin/login-stats`, {
     params: { startDate, endDate },
     timeout: 30000,
   }).catch((error) => {

@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { persistLmsReport } = require('./lmsPersistenceService');
 
 function toLmsDateFormat(dateString) {
   if (!dateString) return dateString;
@@ -29,6 +30,12 @@ async function getUtilizationData({ startDate, endDate }) {
     },
     timeout: 15000,
   });
+
+  try {
+    await persistLmsReport(response.data, { startDate, endDate });
+  } catch (error) {
+    console.error(`[DB persistence] Failed to save LMS report: ${error.message}`);
+  }
 
   return response.data;
 }

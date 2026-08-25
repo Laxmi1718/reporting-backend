@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { getWithProxyFallback } = require('../utils/httpClient');
 
 function logFetchError(app, endpoint, { startDate, endDate }, error) {
   const status = error?.response?.status;
@@ -9,7 +9,7 @@ function logFetchError(app, endpoint, { startDate, endDate }, error) {
 async function fetchTradersCrmReport({ startDate, endDate }) {
   const baseURL = process.env.CRM_TRADERS_BASE_URL || 'https://crm-trader-api.abisibg.com/api';
 
-  const response = await axios.get(`${baseURL}/reports/login-history-stats`, {
+  const response = await getWithProxyFallback(`${baseURL}/reports/login-history-stats`, {
     params: { startDate, endDate },
     timeout: 30000,
   }).catch((error) => {
