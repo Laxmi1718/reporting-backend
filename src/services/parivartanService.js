@@ -11,7 +11,9 @@ async function fetchParivartanReport({ startDate, endDate }) {
 
   const [loginHistoryRes, loginStatsRes] = await Promise.all([
     getWithProxyFallback(`${baseURL}/admin/login-history`, {
-      params: { startDate, endDate },
+      // Default page size is ~50 - without a high limit, quarterly/yearly chart
+      // aggregation below would silently see only the first page of the range.
+      params: { startDate, endDate, limit: 5000 },
       timeout: 30000,
     }).catch((error) => {
       logFetchError('Parivartan', 'login-history', { startDate, endDate }, error);

@@ -18,7 +18,9 @@ async function fetchAbisProCrmReport({ startDate, endDate }) {
       return { error };
     }),
     getWithProxyFallback(`${baseURL.replace('/api', '')}/api/reports/login-history`, {
-      params: { startDate, endDate },
+      // Default page size is small - without a high limit, quarterly/yearly chart
+      // aggregation below would silently see only the first page of the range.
+      params: { startDate, endDate, limit: 5000 },
       timeout: 30000,
     }).catch((error) => {
       logFetchError('Abis Pro (CRM)', 'login-history', { startDate, endDate }, error);

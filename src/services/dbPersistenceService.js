@@ -272,6 +272,30 @@ async function saveElearningStats(reportId, periodType, stats = {}, connection) 
   );
 }
 
+async function saveFormSubmitStats(reportId, periodType, stats = {}, connection) {
+  const db = connection || pool;
+  await db.query(
+    `INSERT INTO ibrems_form_submit_stats (report_id, period_type, total_submit, failed_submit, active_users, submit_average_per_user)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       total_submit = VALUES(total_submit), failed_submit = VALUES(failed_submit),
+       active_users = VALUES(active_users), submit_average_per_user = VALUES(submit_average_per_user)`,
+    [reportId, periodType, stats.totalSubmit ?? null, stats.failedSubmit ?? null, stats.activeUsers ?? null, stats.submitAveragePerUser ?? null],
+  );
+}
+
+async function saveDashboardViewStats(reportId, periodType, stats = {}, connection) {
+  const db = connection || pool;
+  await db.query(
+    `INSERT INTO ibrems_dashboard_view_stats (report_id, period_type, total_view, failed_view, active_users, view_average_per_user)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       total_view = VALUES(total_view), failed_view = VALUES(failed_view),
+       active_users = VALUES(active_users), view_average_per_user = VALUES(view_average_per_user)`,
+    [reportId, periodType, stats.totalView ?? null, stats.failedView ?? null, stats.activeUsers ?? null, stats.viewAveragePerUser ?? null],
+  );
+}
+
 async function saveMyIbExtras(reportId, extras = {}) {
   await pool.query(
     `INSERT INTO myib_report_extras
@@ -305,5 +329,7 @@ module.exports = {
   saveEmployeeCallStats,
   saveTrainingStats,
   saveElearningStats,
+  saveFormSubmitStats,
+  saveDashboardViewStats,
   saveMyIbExtras,
 };

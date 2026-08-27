@@ -4,6 +4,25 @@ const { fetchTradersCrmReport } = require('./tradersCrmService');
 const { fetchChicksCrmReport } = require('./chicksCrmService');
 const { fetchDoctorCrmReport } = require('./doctorCrmService');
 const { persistCrmAppReports } = require('./crmPersistenceService');
+const { persistCrmEmployeeData } = require('./crmEmployeePersistenceService');
+
+// Runs the two persistence steps in the background, in order, without blocking
+// the caller. persistCrmAppReports() already catches its own per-module errors
+// (it "never throws" by design) - these try/catches are defense-in-depth, kept
+// identical to what previously guarded the awaited calls.
+async function persistCrmInBackground(appReports, results, { startDate, endDate }) {
+  try {
+    await persistCrmAppReports(appReports, { startDate, endDate });
+  } catch (error) {
+    console.error(`[DB persistence] CRM persistence step failed: ${error.message}`);
+  }
+
+  try {
+    await persistCrmEmployeeData(results, { startDate, endDate });
+  } catch (error) {
+    console.error(`[DB persistence] CRM employee persistence step failed: ${error.message}`);
+  }
+}
 
 function safeNumber(value) {
   const parsed = Number(value);
@@ -167,8 +186,8 @@ function normalizeLoginData(source, appName, requestedDateRange) {
       dateRange: normalizeDateRange(previous.dateRange || previousContainer),
       ...previousCallMetrics,
     },
-    dailyData: Array.isArray(payload.dailyData || payload.dailyDataTrend || payload.trend || payload.dailyTrend || payload.utilizationPerDay)
-      ? (payload.dailyData || payload.dailyDataTrend || payload.trend || payload.dailyTrend || payload.utilizationPerDay)
+    dailyData: Array.isArray(payload.dailyData || payload.dailyDataTrend || payload.trend || payload.dailyTrend || payload.utilizationPerDay || payload.utilizationPerDayBreakdown)
+      ? (payload.dailyData || payload.dailyDataTrend || payload.trend || payload.dailyTrend || payload.utilizationPerDay || payload.utilizationPerDayBreakdown)
       : [],
     raw: payload,
   };
@@ -274,7 +293,143 @@ function aggregateMetrics(appReports) {
   };
 }
 
-async function fetchCrmOverallReport({ startDate, endDate }) {
+// Mirrors crmEmployeePersistenceService.js's date conversion for Abis Pro's
+// "DD-MM-YYYY HH:mm:ss" login timestamps - duplicated locally (not imported)
+// so this file stays fully independent of that persistence-only module.
+function parseAbisProDateTime(value) {
+  if (!value || typeof value !== 'string') return null;
+  const [datePart, timePart] = value.split(' ');
+  const [day, month, year] = (datePart || '').split('-');
+  if (!day || !month || !year) return null;
+  return `${year}-${month}-${day}${timePart ? 'T' + timePart : ''}`;
+}
+
+// Pulls real per-login {date, employeeId} events out of each module's raw
+// upstream payload (already fetched for the main report - no extra calls),
+// so quarterly/yearly chart totals can be computed from actual records
+// instead of dividing an aggregate. Shapes verified against the parsers in
+// crmEmployeePersistenceService.js. Doctor CRM's upstream API has no
+// per-login timestamp anywhere - returns null (not []) to distinguish
+// "no data available" from "zero real events this range".
+function extractLoginEvents(report) {
+  switch (report.app) {
+    case 'Parivartan': {
+      const records = report.loginHistory?.data?.records || [];
+      return records
+        .filter((r) => r.employee_id && r.login_at)
+        .map((r) => ({ date: r.login_at, employeeId: String(r.employee_id) }));
+    }
+    case 'Abis Pro (CRM)': {
+      const records = Array.isArray(report.loginHistory?.data) ? report.loginHistory.data : [];
+      return records
+        .filter((r) => r.employeeId && (r.loginAtISO || r.loginAt))
+        .map((r) => ({ date: r.loginAtISO || parseAbisProDateTime(r.loginAt), employeeId: String(r.employeeId) }))
+        .filter((r) => r.date);
+    }
+    case 'Traders CRM': {
+      const records = report.loginStats?.data?.recentLogins || [];
+      return records
+        .filter((r) => r.employee?.employeeId && r.loginTime)
+        .map((r) => ({ date: r.loginTime, employeeId: String(r.employee.employeeId) }));
+    }
+    case 'Chicks CRM': {
+      const events = [];
+      (report.loginStats?.perUser || []).forEach((u) => {
+        (u.loginHistory || []).forEach((h) => {
+          if (u.employeeId && h.loginTime) events.push({ date: h.loginTime, employeeId: String(u.employeeId) });
+        });
+      });
+      return events;
+    }
+    default:
+      return null;
+  }
+}
+
+function toISODate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Calendar-quarter buckets clipped to [startDate, endDate], with each label
+// derived from the CLIPPED boundaries - not the full calendar quarter - so a
+// range ending mid-quarter reads e.g. "Jul - Aug '26", never "Jul - Sep '26".
+function buildQuarterlyBuckets(startDate, endDate) {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T23:59:59.999`);
+  const buckets = [];
+
+  let cursorYear = start.getFullYear();
+  let cursorMonth = Math.floor(start.getMonth() / 3) * 3;
+
+  while (new Date(cursorYear, cursorMonth, 1) <= end) {
+    const quarterStart = new Date(cursorYear, cursorMonth, 1);
+    const quarterEnd = new Date(cursorYear, cursorMonth + 3, 0, 23, 59, 59, 999);
+    const bucketStart = quarterStart < start ? start : quarterStart;
+    const bucketEnd = quarterEnd > end ? end : quarterEnd;
+
+    const startMonth = MONTH_NAMES[bucketStart.getMonth()];
+    const endMonth = MONTH_NAMES[bucketEnd.getMonth()];
+    const yearSuffix = String(bucketStart.getFullYear()).slice(-2);
+    const label = startMonth === endMonth ? `${startMonth} '${yearSuffix}` : `${startMonth} - ${endMonth} '${yearSuffix}`;
+
+    buckets.push({ label, startDate: toISODate(bucketStart), endDate: toISODate(bucketEnd), rangeStart: bucketStart, rangeEnd: bucketEnd });
+
+    cursorMonth += 3;
+    if (cursorMonth >= 12) { cursorMonth -= 12; cursorYear += 1; }
+  }
+
+  return buckets;
+}
+
+// Builds real per-quarter Login Trend/Active Users from actual login events -
+// never a division of an overall total. activeUsers is a per-bucket Set of
+// employeeIds, so the same employee active in two quarters counts once in each.
+function buildQuarterlyTrend(events, startDate, endDate) {
+  if (!events) return null;
+
+  const buckets = buildQuarterlyBuckets(startDate, endDate).map((b) => ({ ...b, totalLogins: 0, activeUserIds: new Set() }));
+
+  events.forEach((event) => {
+    if (!event?.date) return;
+    const eventDate = new Date(event.date);
+    if (Number.isNaN(eventDate.getTime())) return;
+    const bucket = buckets.find((b) => eventDate >= b.rangeStart && eventDate <= b.rangeEnd);
+    if (!bucket) return;
+    bucket.totalLogins += 1;
+    if (event.employeeId) bucket.activeUserIds.add(event.employeeId);
+  });
+
+  return buckets.map((b) => ({ label: b.label, startDate: b.startDate, endDate: b.endDate, totalLogins: b.totalLogins, activeUsers: b.activeUserIds.size }));
+}
+
+// Combined CRM-overview quarterly trend: every module builds buckets from the
+// same startDate/endDate, so buckets line up positionally by construction -
+// sum totalLogins/activeUsers across modules that have real data (quarterlyTrend
+// is an array); a module without data (Doctor CRM: null) is excluded from the
+// sum, never treated as a genuine zero.
+function buildCombinedQuarterlyTrend(appReports, startDate, endDate) {
+  const withData = appReports.filter((r) => Array.isArray(r.quarterlyTrend));
+  if (!withData.length) return null;
+
+  return buildQuarterlyBuckets(startDate, endDate).map((bucket, index) => {
+    let totalLogins = 0;
+    let activeUsers = 0;
+    withData.forEach((report) => {
+      const entry = report.quarterlyTrend[index];
+      if (!entry) return;
+      totalLogins += Number(entry.totalLogins) || 0;
+      activeUsers += Number(entry.activeUsers) || 0;
+    });
+    return { label: bucket.label, startDate: bucket.startDate, endDate: bucket.endDate, totalLogins, activeUsers };
+  });
+}
+
+async function fetchCrmOverallReport({ startDate, endDate, allowedAppLabels }) {
   const sources = [
     fetchParivartanReport({ startDate, endDate }),
     fetchAbisProCrmReport({ startDate, endDate }),
@@ -303,6 +458,7 @@ async function fetchCrmOverallReport({ startDate, endDate }) {
         app: report.app,
         ...normalized,
         loginHistory,
+        quarterlyTrend: buildQuarterlyTrend(extractLoginEvents(report), startDate, endDate),
         unavailable: !!report.error || !statsSource,
       };
     }
@@ -310,15 +466,25 @@ async function fetchCrmOverallReport({ startDate, endDate }) {
   }).filter(Boolean);
 
   // Persist to MySQL as a side effect only - never allowed to alter or block the
-  // response the dashboard receives. persistCrmAppReports() already catches its own
-  // per-module errors; this outer catch is defense-in-depth against anything else.
-  try {
-    await persistCrmAppReports(appReports, { startDate, endDate });
-  } catch (error) {
-    console.error(`[DB persistence] CRM persistence step failed: ${error.message}`);
-  }
+  // response the dashboard receives. Fired without awaiting: with hundreds of
+  // per-employee/login-history rows across 5 modules, this was measured taking
+  // several seconds of pure sequential DB round-trips that had nothing to do with
+  // building the response, so the response no longer waits on it. Employee/login-
+  // history persistence still runs strictly after persistCrmAppReports() internally
+  // (it looks up the report_id that step creates) - only the ordering relative to
+  // the HTTP response changed, not the ordering between the two persistence steps.
+  persistCrmInBackground(appReports, results, { startDate, endDate });
 
-  const aggregated = aggregateMetrics(appReports);
+  // allowedAppLabels restricts everything derived below (aggregate totals,
+  // daily trend, per-module breakdown) to a User's assigned CRM modules.
+  // Persistence above already ran against the full, unfiltered appReports -
+  // what a given caller is allowed to see must never affect what gets
+  // written to the database.
+  const visibleAppReports = allowedAppLabels
+    ? appReports.filter((report) => allowedAppLabels.has(report.app))
+    : appReports;
+
+  const aggregated = aggregateMetrics(visibleAppReports);
 
   const previousDateRange = aggregated.overallPrevious.dateRange;
 
@@ -334,8 +500,9 @@ async function fetchCrmOverallReport({ startDate, endDate }) {
       reportPeriod: previousDateRange ? `${previousDateRange.from} - ${previousDateRange.to}` : 'Previous Period',
     },
     dailyData: aggregated.dailyData,
+    quarterlyTrend: buildCombinedQuarterlyTrend(visibleAppReports, startDate, endDate),
     applications: aggregated.applications,
-    appReports,
+    appReports: visibleAppReports,
   };
 }
 

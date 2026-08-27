@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { persistMyIbReport } = require('./myIbPersistenceService');
 
 function toMyIbDateFormat(dateString) {
   if (!dateString) return dateString;
@@ -31,6 +32,12 @@ async function fetchDashboardStats({ reportUpdateDate, period }) {
       timeout: 30000,
     },
   );
+
+  try {
+    await persistMyIbReport(response.data, { reportUpdateDate, period });
+  } catch (error) {
+    console.error(`[DB persistence] Failed to save MyIB report: ${error.message}`);
+  }
 
   return response.data;
 }

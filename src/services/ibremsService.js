@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { persistIbremsReport } = require('./ibremsPersistenceService');
 
 function logFetchError(endpoint, { startDate, endDate }, error) {
   const status = error?.response?.status;
@@ -22,6 +23,12 @@ async function getLogsSummary({ startDate, endDate }) {
       headers: { 'x-api-key': apiKey },
       timeout: 15000,
     });
+
+    try {
+      await persistIbremsReport(response.data, { startDate, endDate });
+    } catch (persistError) {
+      console.error(`[DB persistence] Failed to save IBREMS report: ${persistError.message}`);
+    }
 
     return response.data;
   } catch (error) {

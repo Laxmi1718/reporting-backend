@@ -12,7 +12,20 @@ const NETWORK_ERROR_CODES = new Set([
   'SELF_SIGNED_CERT_IN_CHAIN',
   'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
   'CERT_HAS_EXPIRED',
+  // Some hosts (e.g. the Traders CRM API) are silently black-holed on the direct
+  // path instead of actively refused - the connection just hangs until axios's own
+  // `timeout` fires as ECONNABORTED, never an OS-level error. That hang is the same
+  // "needs the SWG proxy instead" signal as the codes above, just detected client-side.
+  'ECONNABORTED',
 ]);
+
+// A host that's actually reachable directly responds in well under this; a host
+// that's black-holed by network policy never responds at all, no matter how long
+// we wait. So the direct attempt gets a short leash - burning the caller's full
+// timeout (often 30000ms) on a connection that was never going to succeed is what
+// pushed some CRM modules past the frontend's 60s budget once the proxy retry
+// (which uses the caller's real timeout) was added on top.
+const DIRECT_ATTEMPT_TIMEOUT_MS = 6000;
 
 // Direct connection first (works when the backend runs inside the network the CRM
 // APIs are actually hosted on). If DNS/connection/TLS fails, retry once through the
@@ -20,7 +33,8 @@ const NETWORK_ERROR_CODES = new Set([
 // via the SWG client, not the regular DNS server / a trusted direct TLS path.
 async function getWithProxyFallback(url, config = {}) {
   try {
-    return await axios.get(url, config);
+    const directTimeout = Math.min(config.timeout ?? DIRECT_ATTEMPT_TIMEOUT_MS, DIRECT_ATTEMPT_TIMEOUT_MS);
+    return await axios.get(url, { ...config, timeout: directTimeout });
   } catch (error) {
     if (!NETWORK_ERROR_CODES.has(error.code)) throw error;
 

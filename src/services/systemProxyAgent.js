@@ -2,7 +2,6 @@ const { execSync } = require('child_process');
 const { PacProxyAgent } = require('pac-proxy-agent');
 
 let cachedAgent;
-let attempted = false;
 
 function readAutoConfigUrl() {
   if (process.platform !== 'win32') return null;
@@ -25,8 +24,7 @@ function readAutoConfigUrl() {
 // This is resolved lazily and cached because the proxy's local port changes
 // whenever the SWG client restarts.
 function getSystemProxyAgent() {
-  if (attempted) return cachedAgent;
-  attempted = true;
+  if (cachedAgent) return cachedAgent;
 
   const pacUrl = readAutoConfigUrl();
   cachedAgent = pacUrl ? new PacProxyAgent(pacUrl, { rejectUnauthorized: false }) : null;
