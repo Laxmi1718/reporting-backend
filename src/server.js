@@ -5,6 +5,8 @@ const reportRoutes = require('./routes/reportRoutes');
 const crmRoutes = require('./routes/crmRoutes');
 const myIbRoutes = require('./routes/myIbRoutes');
 const ibremsRoutes = require('./routes/ibremsRoutes');
+const grimRoutes = require('./routes/grimRoutes');
+const ibGroupRoutes = require('./routes/ibGroupRoutes');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 
@@ -29,6 +31,8 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/crm', crmRoutes);
 app.use('/api/myib', myIbRoutes);
 app.use('/api/ibrems', ibremsRoutes);
+app.use('/api/grim', grimRoutes);
+app.use('/api/ib-group', ibGroupRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

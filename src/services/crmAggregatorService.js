@@ -407,6 +407,37 @@ function buildQuarterlyTrend(events, startDate, endDate) {
   return buckets.map((b) => ({ label: b.label, startDate: b.startDate, endDate: b.endDate, totalLogins: b.totalLogins, activeUsers: b.activeUserIds.size }));
 }
 
+// Real per-day Login Trend/Active Users, built the same way buildQuarterlyTrend
+// builds per-quarter ones - just with one bucket per calendar day instead of per
+// quarter. This is the fallback for modules whose vendor API never sends a
+// pre-aggregated daily series of its own (Parivartan, Chicks CRM): they DO
+// return real per-login timestamps (loginHistory/perUser.loginHistory), just
+// not bucketed by day, so we bucket them here instead of showing no day-wise
+// chart at all. activeUsers is a per-day Set of employeeIds, same dedup rule
+// as the quarterly version.
+function buildDailyTrend(events, startDate, endDate) {
+  if (!events) return null;
+
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T23:59:59.999`);
+  const days = new Map();
+  for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+    days.set(toISODate(cursor), { totalLogins: 0, activeUserIds: new Set() });
+  }
+
+  events.forEach((event) => {
+    if (!event?.date) return;
+    const eventDate = new Date(event.date);
+    if (Number.isNaN(eventDate.getTime())) return;
+    const day = days.get(toISODate(eventDate));
+    if (!day) return;
+    day.totalLogins += 1;
+    if (event.employeeId) day.activeUserIds.add(event.employeeId);
+  });
+
+  return Array.from(days.entries()).map(([date, d]) => ({ date, totalLogins: d.totalLogins, activeUsers: d.activeUserIds.size }));
+}
+
 // Combined CRM-overview quarterly trend: every module builds buckets from the
 // same startDate/endDate, so buckets line up positionally by construction -
 // sum totalLogins/activeUsers across modules that have real data (quarterlyTrend
@@ -429,16 +460,29 @@ function buildCombinedQuarterlyTrend(appReports, startDate, endDate) {
   });
 }
 
+// Diagnostic timing only - the response waits on all 5 vendor calls via
+// Promise.allSettled below, so one slow/proxy-falling-back vendor makes the
+// whole CRM fetch slow. This logs each vendor's real elapsed time so the
+// actual bottleneck shows up in the console instead of being guessed at.
+function withTiming(label, promise) {
+  const start = Date.now();
+  return promise.finally(() => {
+    console.log(`[CRM timing] ${label}: ${Date.now() - start}ms`);
+  });
+}
+
 async function fetchCrmOverallReport({ startDate, endDate, allowedAppLabels }) {
+  const overallStart = Date.now();
   const sources = [
-    fetchParivartanReport({ startDate, endDate }),
-    fetchAbisProCrmReport({ startDate, endDate }),
-    fetchTradersCrmReport({ startDate, endDate }),
-    fetchChicksCrmReport({ startDate, endDate }),
-    fetchDoctorCrmReport({ startDate, endDate }),
+    withTiming('Parivartan', fetchParivartanReport({ startDate, endDate })),
+    withTiming('Abis Pro (CRM)', fetchAbisProCrmReport({ startDate, endDate })),
+    withTiming('Traders CRM', fetchTradersCrmReport({ startDate, endDate })),
+    withTiming('Chicks CRM', fetchChicksCrmReport({ startDate, endDate })),
+    withTiming('Doctor CRM', fetchDoctorCrmReport({ startDate, endDate })),
   ];
 
   const results = await Promise.allSettled(sources);
+  console.log(`[CRM timing] all vendors settled: ${Date.now() - overallStart}ms`);
 
   const appReports = results.map((result) => {
     if (result.status === 'fulfilled' && result.value) {
@@ -454,11 +498,22 @@ async function fetchCrmOverallReport({ startDate, endDate, allowedAppLabels }) {
           ? report.loginHistory.records
           : [];
 
+      const loginEvents = extractLoginEvents(report);
+      // normalizeLoginData's dailyData only ever picks up a pre-aggregated daily
+      // array the vendor itself sends (e.g. Traders CRM's utilizationPerDay) -
+      // Parivartan/Chicks CRM don't send one, only raw per-login events, so it
+      // comes back empty here. Fall back to bucketing those real events by day
+      // ourselves rather than leaving the module's day-wise chart with nothing.
+      const dailyData = Array.isArray(normalized.dailyData) && normalized.dailyData.length
+        ? normalized.dailyData
+        : (buildDailyTrend(loginEvents, startDate, endDate) || []);
+
       return {
         app: report.app,
         ...normalized,
+        dailyData,
         loginHistory,
-        quarterlyTrend: buildQuarterlyTrend(extractLoginEvents(report), startDate, endDate),
+        quarterlyTrend: buildQuarterlyTrend(loginEvents, startDate, endDate),
         unavailable: !!report.error || !statsSource,
       };
     }

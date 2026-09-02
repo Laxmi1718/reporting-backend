@@ -31,7 +31,17 @@ const DIRECT_ATTEMPT_TIMEOUT_MS = 6000;
 // APIs are actually hosted on). If DNS/connection/TLS fails, retry once through the
 // local corporate proxy - needed on dev machines where CRM hosts are only reachable
 // via the SWG client, not the regular DNS server / a trusted direct TLS path.
-async function getWithProxyFallback(url, config = {}) {
+//
+// `retryOptions.retries` adds extra attempts through the proxy leg alone (never
+// repeats the direct attempt - once a network error puts us on the proxy path,
+// direct is known not to work for this host) for vendors measured to be
+// intermittently slow/flaky even over the proxy (e.g. Traders CRM). Each retry
+// uses `retryOptions.retryTimeout` (falling back to `config.timeout`) - keep the
+// combined worst case (direct + first proxy attempt + retries) comfortably under
+// the caller's own overall budget.
+async function getWithProxyFallback(url, config = {}, retryOptions = {}) {
+  const { retries = 0, retryTimeout } = retryOptions;
+
   try {
     const directTimeout = Math.min(config.timeout ?? DIRECT_ATTEMPT_TIMEOUT_MS, DIRECT_ATTEMPT_TIMEOUT_MS);
     return await axios.get(url, { ...config, timeout: directTimeout });
@@ -41,7 +51,18 @@ async function getWithProxyFallback(url, config = {}) {
     const agent = getSystemProxyAgent();
     if (!agent) throw error;
 
-    return axios.get(url, { ...config, httpAgent: agent, httpsAgent: agent, proxy: false });
+    const proxyConfig = { ...config, httpAgent: agent, httpsAgent: agent, proxy: false };
+
+    let lastError;
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      try {
+        const timeout = attempt === 0 ? config.timeout : (retryTimeout ?? config.timeout);
+        return await axios.get(url, { ...proxyConfig, timeout });
+      } catch (proxyError) {
+        lastError = proxyError;
+      }
+    }
+    throw lastError;
   }
 }
 

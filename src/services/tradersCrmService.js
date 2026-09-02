@@ -18,6 +18,13 @@ async function fetchTradersCrmReport({ startDate, endDate }) {
     // used by the other CRM modules leaves almost no margin and times out
     // intermittently (surfacing as "Could not fetch live data" on the dashboard).
     timeout: 45000,
+  }, {
+    // One extra attempt through the proxy when the first one times out/errors -
+    // this vendor is intermittently slow enough that a single try isn't reliable.
+    // Worst case: 6s direct + 45s first proxy attempt + 20s retry = 71s, still
+    // under the dashboard's 90s overall CRM request budget.
+    retries: 1,
+    retryTimeout: 20000,
   }).catch((error) => {
     logFetchError('Traders CRM', 'login-history-stats', { startDate, endDate }, error);
     return { error };
