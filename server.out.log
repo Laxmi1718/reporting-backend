@@ -1,0 +1,57 @@
+◇ injected env (23) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+◇ injected env (0) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+Server running on port 5000
+[CRM timing] Chicks CRM: 507ms
+[CRM timing] Doctor CRM: 544ms
+[CRM:Parivartan] login-stats failed for 2026-08-14 - 2026-09-02: HTTP 403
+[CRM:Parivartan] login-history failed for 2026-08-14 - 2026-09-02: HTTP 403
+[CRM timing] Parivartan: 1099ms
+[CRM:Traders CRM] login-history-stats failed for 2026-08-14 - 2026-09-02: HTTP 403
+[CRM timing] Traders CRM: 1354ms
+[CRM timing] Abis Pro (CRM): 5171ms
+[CRM timing] all vendors settled: 5268ms
+[CRM timing] Chicks CRM: 225ms
+[CRM timing] Doctor CRM: 290ms
+[CRM:Parivartan] login-history failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM:Parivartan] login-stats failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM timing] Parivartan: 628ms
+[CRM:Traders CRM] login-history-stats failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM timing] Traders CRM: 988ms
+[CRM timing] Abis Pro (CRM): 4633ms
+[CRM timing] all vendors settled: 4642ms
+[CRM timing] Chicks CRM: 237ms
+[CRM timing] Doctor CRM: 292ms
+[CRM:Parivartan] login-stats failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM:Parivartan] login-history failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM timing] Parivartan: 561ms
+[CRM:Traders CRM] login-history-stats failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM timing] Traders CRM: 1086ms
+[CRM timing] Abis Pro (CRM): 4480ms
+[CRM timing] all vendors settled: 4489ms
+[CRM timing] Chicks CRM: 192ms
+[CRM timing] Doctor CRM: 307ms
+[CRM:Parivartan] login-stats failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM:Parivartan] login-history failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM timing] Parivartan: 542ms
+[CRM:Traders CRM] login-history-stats failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM timing] Traders CRM: 825ms
+[CRM timing] Abis Pro (CRM): 5082ms
+[CRM timing] all vendors settled: 5088ms
+[CRM timing] Chicks CRM: 69ms
+[CRM timing] Doctor CRM: 144ms
+[CRM:Parivartan] login-history failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM:Parivartan] login-stats failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM timing] Parivartan: 684ms
+[CRM:Traders CRM] login-history-stats failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM timing] Traders CRM: 1014ms
+[CRM timing] Abis Pro (CRM): 4773ms
+[CRM timing] all vendors settled: 4777ms
+[CRM timing] Chicks CRM: 75ms
+[CRM timing] Doctor CRM: 150ms
+[CRM:Parivartan] login-history failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM:Parivartan] login-stats failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM timing] Parivartan: 762ms
+[CRM:Traders CRM] login-history-stats failed for 2026-08-07 - 2026-09-02: HTTP 403
+[CRM timing] Traders CRM: 1212ms
+[CRM timing] Abis Pro (CRM): 4711ms
+[CRM timing] all vendors settled: 4719ms

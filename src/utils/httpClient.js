@@ -11,6 +11,7 @@ const NETWORK_ERROR_CODES = new Set([
   // trusted CA store. Both mean "route this through the SWG's own proxy instead".
   'SELF_SIGNED_CERT_IN_CHAIN',
   'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
   'CERT_HAS_EXPIRED',
   // Some hosts (e.g. the Traders CRM API) are silently black-holed on the direct
   // path instead of actively refused - the connection just hangs until axios's own
@@ -66,4 +67,33 @@ async function getWithProxyFallback(url, config = {}, retryOptions = {}) {
   }
 }
 
-module.exports = { getWithProxyFallback };
+// Same direct-then-proxy-fallback strategy as getWithProxyFallback, for POST calls
+// (e.g. IdeaBank's utilization-report endpoint).
+async function postWithProxyFallback(url, data, config = {}, retryOptions = {}) {
+  const { retries = 0, retryTimeout } = retryOptions;
+
+  try {
+    const directTimeout = Math.min(config.timeout ?? DIRECT_ATTEMPT_TIMEOUT_MS, DIRECT_ATTEMPT_TIMEOUT_MS);
+    return await axios.post(url, data, { ...config, timeout: directTimeout });
+  } catch (error) {
+    if (!NETWORK_ERROR_CODES.has(error.code)) throw error;
+
+    const agent = getSystemProxyAgent();
+    if (!agent) throw error;
+
+    const proxyConfig = { ...config, httpAgent: agent, httpsAgent: agent, proxy: false };
+
+    let lastError;
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      try {
+        const timeout = attempt === 0 ? config.timeout : (retryTimeout ?? config.timeout);
+        return await axios.post(url, data, { ...proxyConfig, timeout });
+      } catch (proxyError) {
+        lastError = proxyError;
+      }
+    }
+    throw lastError;
+  }
+}
+
+module.exports = { getWithProxyFallback, postWithProxyFallback };

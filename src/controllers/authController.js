@@ -53,6 +53,28 @@ async function login(req, res) {
   }
 }
 
+// Lets an already-logged-in browser pick up application access granted after
+// login (JWT only carries id/role, never applications) without forcing a
+// logout/login - same Admin-vs-User application lookup login() uses.
+async function me(req, res) {
+  try {
+    const applications = req.user.role === 'Admin'
+      ? await listApplications()
+      : await getUserApplications(req.user.id);
+
+    return res.json({
+      success: true,
+      employeeId: req.user.employeeId,
+      role: req.user.role,
+      applications,
+    });
+  } catch (error) {
+    console.error('[Auth] /me failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Failed to load current user' });
+  }
+}
+
 module.exports = {
   login,
+  me,
 };
