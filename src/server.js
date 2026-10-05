@@ -8,6 +8,7 @@ const ibremsRoutes = require('./routes/ibremsRoutes');
 const grimRoutes = require('./routes/grimRoutes');
 const ibGroupRoutes = require('./routes/ibGroupRoutes');
 const aioRoutes = require('./routes/aioRoutes');
+const abisProRoutes = require('./routes/abisProRoutes');
 const ideaBankRoutes = require('./routes/ideaBankRoutes');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
@@ -36,6 +37,7 @@ app.use('/api/ibrems', ibremsRoutes);
 app.use('/api/grim', grimRoutes);
 app.use('/api/ib-group', ibGroupRoutes);
 app.use('/api/aio', aioRoutes);
+app.use('/api/abispro', abisProRoutes);
 app.use('/api/ideabank', ideaBankRoutes);
 
 app.listen(PORT, () => {

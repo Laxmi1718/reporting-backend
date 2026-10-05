@@ -13,7 +13,7 @@ const PERIOD_MAP = {
 };
 
 async function getMyIbReport(req, res) {
-  const { reportUpdateDate, reportType } = req.query;
+  const { reportUpdateDate, reportType, fromDate, toDate } = req.query;
 
   if (!reportUpdateDate) {
     return res.status(400).json({
@@ -25,7 +25,7 @@ async function getMyIbReport(req, res) {
   const period = PERIOD_MAP[reportType] || 'Week';
 
   try {
-    const data = await fetchDashboardStats({ reportUpdateDate, period });
+    const data = await fetchDashboardStats({ reportUpdateDate, period, fromDate, toDate });
 
     if (data && data.IsSuccess === false) {
       return res.status(502).json({
